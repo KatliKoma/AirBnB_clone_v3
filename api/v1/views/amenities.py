@@ -1,112 +1,78 @@
 #!/usr/bin/python3
-""" Flask routes for `Amenity` object related URI subpaths using the
-`app_views` Blueprint.
 """
+a new view for State objects that manages all standard RESTful API actions
+"""
+
 from api.v1.views import app_views
-from flask import Flask, jsonify, abort, request
-from models import storage
 from models.amenity import Amenity
+from flask import jsonify, abort, request
+from models import storage
+
+cls = Amenity
 
 
-@app_views.route("/amenities", methods=['GET'],
+@app_views.route("/amenities", methods=["GET"], strict_slashes=False)
+@app_views.route("/amenities/<string:amenity_id>", methods=["GET"],
                  strict_slashes=False)
-def GET_all_Amenity():
-    """ Returns JSON list of all `Amenity` instances in storage
-
-    Return:
-        JSON list of all `Amenity` instances
-    """
-    amenity_list = []
-    for amenity in storage.all(Amenity).values():
-        amenity_list.append(amenity.to_dict())
-
-    return jsonify(amenity_list)
-
-
-@app_views.route("/amenities/<amenity_id>", methods=['GET'],
-                 strict_slashes=False)
-def GET_Amenity(amenity_id):
-    """ Returns `Amenity` instance in storage by id in URI subpath
-
-    Args:
-        amenity_id: uuid of `Amenity` instance in storage
-
-    Return:
-        `Amenity` instance with corresponding uuid, or 404 response
-    on error
-    """
-    amenity = storage.get(Amenity, amenity_id)
-
-    if amenity:
-        return jsonify(amenity.to_dict())
+def get_amenity(amenity_id=None):
+    """Retrieves a Amenity object"""
+    if amenity_id is not None:
+        obj = storage.get(cls, amenity_id)
+        if obj is not None:
+            return jsonify(obj.to_dict())
+        else:
+            abort(404)
     else:
+        objs = storage.all(cls)
+        my_lst = []
+        for obj in objs.values():
+            my_lst.append(obj.to_dict())
+        return jsonify(my_lst)
+
+
+@app_views.route("/amenities/<string:amenity_id>", methods=["DELETE"])
+def delete_amenity(amenity_id):
+    """Deletes a Amenity object"""
+    obj = storage.get(cls, amenity_id)
+    if obj is None:
         abort(404)
-
-
-@app_views.route("/amenities/<amenity_id>", methods=['DELETE'],
-                 strict_slashes=False)
-def DELETE_Amenity(amenity_id):
-    """ Deletes `Amenity` instance in storage by id in URI subpath
-
-    Args:
-        amenity_id: uuid of `Amenity` instance in storage
-
-    Return:
-        Empty dictionary and response status 200, or 404 response
-    on error
-    """
-    amenity = storage.get(Amenity, amenity_id)
-
-    if amenity:
-        storage.delete(amenity)
+    else:
+        storage.delete(obj)
         storage.save()
-        return ({})
-    else:
+        storage.reload()
+        return jsonify({})
+
+
+@app_views.route("/amenities", methods=["POST"], strict_slashes=False)
+def create_amenity():
+    """Creates a Amenity"""
+    my_dict = request.get_json(silent=True)
+    if my_dict is None:
+        abort(400, "Not a JSON")
+    if "name" not in my_dict:
+        abort(400, "Missing name")
+    names = my_dict["name"]
+    obj = cls(name=names)
+    storage.new(obj)
+    storage.save()
+    storage.reload()
+    return jsonify(obj.to_dict()), 201
+
+
+@app_views.route("/amenities/<string:amenity_id>", methods=["PUT"])
+def update_amenity(amenity_id):
+    """Updates a Amenity object"""
+    obj = storage.get(cls, amenity_id)
+    if obj is None:
         abort(404)
-
-
-@app_views.route('/amenities', methods=['POST'], strict_slashes=False)
-def POST_Amenity():
-    """ Creates new `Amenity` instance in storage
-
-    Return:
-        Empty dictionary and response status 200, or 404 response
-    on error
-    """
-    req_dict = request.get_json()
-    if not req_dict:
-        return (jsonify({'error': 'Not a JSON'}), 400)
-    elif 'name' not in req_dict:
-        return (jsonify({'error': 'Missing name'}), 400)
-    new_Amenity = Amenity(**req_dict)
-    new_Amenity.save()
-
-    return (jsonify(new_Amenity.to_dict()), 201)
-
-
-@app_views.route("/amenities/<amenity_id>", methods=['PUT'],
-                 strict_slashes=False)
-def PUT_Amenity(amenity_id):
-    """ Updates `Amenity` instance in storage by id in URI subpath, with
-    kwargs from HTTP body request JSON dict
-
-    Args:
-        amenity_id: uuid of `Amenity` instance in storage
-
-    Return:
-        Empty dictionary and response status 200, or 404 response
-    on error
-    """
-    amenity = storage.get(Amenity, amenity_id)
-    req_dict = request.get_json()
-
-    if amenity:
-        if not req_dict:
-            return (jsonify({'error': 'Not a JSON'}), 400)
-        for key, value in req_dict.items():
-            if key not in ['id', 'created_at', 'updated_at']:
-                setattr(amenity, key, value)
-        storage.save()
-        return (jsonify(amenity.to_dict()))
-    else:
-        abort(404)
+    my_dict = request.get_json(silent=True)
+    if my_dict is None:
+        abort(400, "Not a JSON")
+    for k, v in my_dict.items():
+        if k == 'id' or k == 'created_at' or k == 'updated_at':
+            continue
+        setattr(obj, k, v)
+    obj.save()
+    storage.save()
+    storage.reload()
+    return jsonify(obj.to_dict()), 200
