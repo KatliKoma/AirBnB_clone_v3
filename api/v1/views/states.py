@@ -1,35 +1,79 @@
 #!/usr/bin/python3
-"""index of views"""
+"""
+a new view for State objects that handles all default RESTFul API
+actions
+"""
+
 from api.v1.views import app_views
-from flask import jsonify
-from models import storage
-from models.amenity import Amenity
-from models.city import City
-from models.place import Place
-from models.review import Review
 from models.state import State
-from models.user import User
-from collections import OrderedDict
+from flask import jsonify, abort, request
+from models import storage
 
-class_plurals = {'amenities': Amenity, 'cities': City, 'places': Place,
-                 'reviews': Review, 'states': State, 'users': User}
-
-
-@app_views.route('/status', strict_slashes=False)
-def status():
-    """status of api v1"""
-    status = {"status": "OK"}
-    return jsonify(status)
+cls = State
 
 
-@app_views.route('/stats', strict_slashes=False)
-def stats():
-    """ Returns itemized count of objects in storage by class
+@app_views.route("/states", methods=["GET"], strict_slashes=False)
+@app_views.route("/states/<string:state_id>", methods=["GET"],
+                 strict_slashes=False)
+def get_state(state_id=None):
+    """Retrieves a State object"""
+    if state_id is not None:
+        obj = storage.get(cls, state_id)
+        if obj is not None:
+            return jsonify(obj.to_dict())
+        else:
+            abort(404)
+    else:
+        objs = storage.all(cls)
+        my_lst = []
+        for obj in objs.values():
+            my_lst.append(obj.to_dict())
+        return jsonify(my_lst)
 
-    """
-    stats = OrderedDict()
-    for key in sorted(class_plurals.keys()):
-        count = storage.count(class_plurals[key])
-        if count > 0:
-            stats[key] = count
-    return jsonify(stats)
+
+@app_views.route("/states/<string:state_id>", methods=["DELETE"])
+def delete_state(state_id):
+    """Deletes a State object"""
+    obj = storage.get(cls, state_id)
+    if obj is None:
+        abort(404)
+    else:
+        storage.delete(obj)
+        storage.save()
+        storage.reload()
+        return jsonify({})
+
+
+@app_views.route("/states", methods=["POST"], strict_slashes=False)
+def create_state():
+    """Creates a State"""
+    my_dict = request.get_json(silent=True)
+    if my_dict is None:
+        abort(400, "Not a JSON")
+    if "name" not in my_dict:
+        abort(400, "Missing name")
+    names = my_dict["name"]
+    obj = cls(name=names)
+    storage.new(obj)
+    storage.save()
+    storage.reload()
+    return jsonify(obj.to_dict()), 201
+
+
+@app_views.route("/states/<string:state_id>", methods=["PUT"])
+def update_state(state_id):
+    """Updates a State object"""
+    obj = storage.get(cls, state_id)
+    if obj is None:
+        abort(404)
+    my_dict = request.get_json(silent=True)
+    if my_dict is None:
+        abort(400, "Not a JSON")
+    for k, v in my_dict.items():
+        if k == 'id' or k == 'created_at' or k == 'updated_at':
+            continue
+        setattr(obj, k, v)
+    obj.save()
+    storage.save()
+    storage.reload()
+    return jsonify(obj.to_dict()), 200
