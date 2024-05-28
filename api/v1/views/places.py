@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 """
-a new view for State objects that handles all default RESTFul API
-actions
+a new view for State objects that handles all default RESTful API actions
 """
 
 from api.v1.views import app_views
